@@ -13,6 +13,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+func CORS() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+			next.ServeHTTP(w, r)
+		}
+		return http.HandlerFunc(fn)
+	}
+}
+
 func main() {
 	// Initialize database
 	db, err := database.NewDatabase()
@@ -28,14 +40,24 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Routes
 	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
 		reflectormiddleware.RateLimiter(time.Minute, 1)(api.CreateEntry(db)).ServeHTTP(w, r)
 	})
 
-	r.Get("/{token}", api.GetIP(db))
+	r.With(CORS()).Get("/dbxcheck", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("{\"status\": \"ok\"}"))
+	})
 
-	// Parse command-line arguments
+	r.With(CORS()).Options("/{token}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	r.With(CORS()).Get("/{token}", func(w http.ResponseWriter, r *http.Request) {
+		api.GetIP(db).ServeHTTP(w, r)
+	})
+
 	bindAddr := flag.String("bind", ":8080", "Bind address and port for the server")
 	flag.Parse()
 
