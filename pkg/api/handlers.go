@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/dogeorg/reflector/pkg/database"
 	"github.com/go-chi/chi/v5"
@@ -38,7 +39,22 @@ func CreateEntry(db *database.Database) http.HandlerFunc {
 
 func GetIP(db *database.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
 		token := chi.URLParam(r, "token")
+
+		if token == "me" {
+			ip := r.RemoteAddr
+			if fwdIP := r.Header.Get("X-Forwarded-For"); fwdIP != "" {
+				ip = fwdIP
+			}
+			// Strip the port from the IP address
+			if colonIndex := strings.LastIndex(ip, ":"); colonIndex != -1 {
+				ip = ip[:colonIndex]
+			}
+			json.NewEncoder(w).Encode(map[string]string{"ip": ip})
+			return
+		}
 
 		ip, err := db.GetIP(token)
 		if err != nil {
@@ -51,7 +67,6 @@ func GetIP(db *database.Database) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"ip": ip})
 	}
 }
